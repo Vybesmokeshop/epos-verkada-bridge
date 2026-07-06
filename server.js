@@ -1,14 +1,86 @@
 const express = require("express");
 
 const app = express();
-
 app.use(express.json());
 
-app.post("/epos-webhook", (req, res) => {
-  console.log("EPOS WEBHOOK RECEIVED:");
-  console.log(JSON.stringify(req.body, null, 2));
+const VERKADA_API_KEY = process.env.VERKADA_API_KEY;
+const VERKADA_CAMERA_ID = process.env.VERKADA_CAMERA_ID;
+let VERKADA_EVENT_TYPE_ID = process.env.VERKADA_EVENT_TYPE_ID;
 
-  res.status(200).send("OK");
+const VERKADA_HEADERS = {
+  "Content-Type": "application/json",
+  "x-verkada-auth": VERKADA_API_KEY
+};
+
+async function createEventTypeIfNeeded() {
+  if (VERKADA_EVENT_TYPE_ID) return VERKADA_EVENT_TYPE_ID;
+
+  const response = await fetch("https://api.verkada.com/cameras/v1/video_tagging/event_type", {
+    method: "POST",
+    headers: VERKADA_HEADERS,
+    body: JSON.stringify({
+      name: "Epos Transaction",
+      event_schema: {
+        receipt_id: "string",
+        amount: "float",
+        employee: "string",
+        payment_type: "string",
+        items: "string"
+      }
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.log("Verkada event type error:", data);
+    throw new Error("Could not create Verkada event type");
+  }
+
+  console.log("Created Verkada Event Type UID:", data.event_type_uid);
+  return data.event_type_uid;
+}
+
+app.post("/epos-webhook", async (req, res) => {
+  try {
+    console.log("EPOS WEBHOOK RECEIVED:");
+    console.log(JSON.stringify(req.body, null, 2));
+
+    const sale = req.body;
+    const eventTypeId = await createEventTypeIfNeeded();
+
+    const payload = {
+      camera_id: VERKADA_CAMERA_ID,
+      event_type_uid: eventTypeId,
+      time_ms: Date.now(),
+      attributes: {
+        receipt_id: String(sale.id || sale.transactionId || sale.TransactionId || "unknown"),
+        amount: Number(sale.total || sale.Total || sale.amount || sale.Amount || 0),
+        employee: String(sale.employeeName || sale.EmployeeName || sale.staffName || sale.StaffName || "unknown"),
+        payment_type: String(sale.paymentType || sale.PaymentType || "unknown"),
+        items: JSON.stringify(sale.items || sale.Items || [])
+      }
+    };
+
+    const response = await fetch("https://api.verkada.com/cameras/v1/video_tagging/event", {
+      method: "POST",
+      headers: VERKADA_HEADERS,
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      console.log("Verkada event error:", text);
+      return res.status(500).send("Verkada error");
+    }
+
+    console.log("Sent transaction to Verkada:", text);
+    res.status(200).send("OK");
+  } catch (err) {
+    console.error("Bridge error:", err);
+    res.status(500).send("Bridge error");
+  }
 });
 
 app.get("/", (req, res) => {
