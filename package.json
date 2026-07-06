@@ -1,0 +1,12 @@
+{
+  "name": "epos-verkada-bridge",
+  "version": "1.0.0",
+  "description": "Bridge between Epos Now and Verkada Helix",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
