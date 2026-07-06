@@ -5,19 +5,36 @@ app.use(express.json());
 
 const VERKADA_API_KEY = process.env.VERKADA_API_KEY;
 const VERKADA_CAMERA_ID = process.env.VERKADA_CAMERA_ID;
-let VERKADA_EVENT_TYPE_ID = process.env.VERKADA_EVENT_TYPE_ID;
 
-const VERKADA_HEADERS = {
-  "Content-Type": "application/json",
-  "x-verkada-auth": VERKADA_API_KEY
-};
+let VERKADA_EVENT_TYPE_ID = process.env.VERKADA_EVENT_TYPE_ID || null;
 
-async function createEventTypeIfNeeded() {
+async function getVerkadaToken() {
+  const response = await fetch("https://api.verkada.com/token", {
+    method: "POST",
+    headers: {
+      "x-api-key": VERKADA_API_KEY
+    }
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.log("Verkada token error:", data);
+    throw new Error("Could not get Verkada token");
+  }
+
+  return data.token;
+}
+
+async function createEventTypeIfNeeded(token) {
   if (VERKADA_EVENT_TYPE_ID) return VERKADA_EVENT_TYPE_ID;
 
   const response = await fetch("https://api.verkada.com/cameras/v1/video_tagging/event_type", {
     method: "POST",
-    headers: VERKADA_HEADERS,
+    headers: {
+      "Content-Type": "application/json",
+      "x-verkada-auth": token
+    },
     body: JSON.stringify({
       name: "Epos Transaction",
       event_schema: {
@@ -37,8 +54,10 @@ async function createEventTypeIfNeeded() {
     throw new Error("Could not create Verkada event type");
   }
 
-  console.log("Created Verkada Event Type UID:", data.event_type_uid);
-  return data.event_type_uid;
+  VERKADA_EVENT_TYPE_ID = data.event_type_uid;
+  console.log("Created Verkada Event Type:", VERKADA_EVENT_TYPE_ID);
+
+  return VERKADA_EVENT_TYPE_ID;
 }
 
 app.post("/epos-webhook", async (req, res) => {
@@ -47,7 +66,9 @@ app.post("/epos-webhook", async (req, res) => {
     console.log(JSON.stringify(req.body, null, 2));
 
     const sale = req.body;
-    const eventTypeId = await createEventTypeIfNeeded();
+
+    const token = await getVerkadaToken();
+    const eventTypeId = await createEventTypeIfNeeded(token);
 
     const payload = {
       camera_id: VERKADA_CAMERA_ID,
@@ -64,7 +85,10 @@ app.post("/epos-webhook", async (req, res) => {
 
     const response = await fetch("https://api.verkada.com/cameras/v1/video_tagging/event", {
       method: "POST",
-      headers: VERKADA_HEADERS,
+      headers: {
+        "Content-Type": "application/json",
+        "x-verkada-auth": token
+      },
       body: JSON.stringify(payload)
     });
 
