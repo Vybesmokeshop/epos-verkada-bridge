@@ -9,7 +9,7 @@ let VERKADA_EVENT_TYPE_ID = process.env.VERKADA_EVENT_TYPE_ID;
 
 const VERKADA_HEADERS = {
   "Content-Type": "application/json",
-  "x-verkada-auth": VERKADA_API_KEY
+  "x-api-key": VERKADA_API_KEY
 };
 
 async function createEventTypeIfNeeded() {
