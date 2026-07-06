@@ -70,18 +70,26 @@ app.post("/epos-webhook", async (req, res) => {
     const token = await getVerkadaToken();
     const eventTypeId = await createEventTypeIfNeeded(token);
 
-    const payload = {
-      camera_id: VERKADA_CAMERA_ID,
-      event_type_uid: eventTypeId,
-      time_ms: Date.now(),
-      attributes: {
-        receipt_id: String(sale.id || sale.transactionId || sale.TransactionId || "unknown"),
-        amount: Number(sale.total || sale.Total || sale.amount || sale.Amount || 0),
-        employee: String(sale.employeeName || sale.EmployeeName || sale.staffName || sale.StaffName || "unknown"),
-        payment_type: String(sale.paymentType || sale.PaymentType || "unknown"),
-        items: JSON.stringify(sale.items || sale.Items || [])
-      }
-    };
+    const itemsText = (sale.TransactionItems || [])
+  .map(item => `ProductID ${item.ProductId} x${item.Quantity} - $${Number(item.UnitPrice || 0).toFixed(2)}`)
+  .join(", ");
+
+const paymentText = (sale.Tenders || [])
+  .map(tender => `${tender.Type || "UNKNOWN"} $${Number(tender.Amount || 0).toFixed(2)}`)
+  .join(", ");
+
+const payload = {
+  camera_id: VERKADA_CAMERA_ID,
+  event_type_uid: eventTypeId,
+  time_ms: new Date(sale.DateTime).getTime(),
+  attributes: {
+    receipt_id: String(sale.Barcode || sale.Id || "unknown").trim(),
+    amount: Number(sale.TotalAmount || 0),
+    employee: String(sale.StaffId || "unknown"),
+    payment_type: paymentText || "unknown",
+    items: itemsText || "unknown"
+  }
+};
 
     const response = await fetch("https://api.verkada.com/cameras/v1/video_tagging/event", {
       method: "POST",
