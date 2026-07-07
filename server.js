@@ -36,7 +36,7 @@ async function createEventTypeIfNeeded(token) {
       "x-verkada-auth": token
     },
     body: JSON.stringify({
-      name: "Epos Transaction",
+      name: "Epos Transaction 2",
       event_schema: {
         receipt_id: "string",
         amount: "float",
